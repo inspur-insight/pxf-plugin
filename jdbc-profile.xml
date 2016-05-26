@@ -1,0 +1,8 @@
+<profile>
+    <name>JDBC</name>
+    <description>A profile for writing data out of HAWQ via JDBC</description>
+    <plugins>
+        <accessor>com.insight.pxf.plugins.jdbc.JdbcAccessor</accessor>
+        <resolver>com.insight.pxf.plugins.jdbc.JdbcResolver</resolver>
+    </plugins>
+</profile>
