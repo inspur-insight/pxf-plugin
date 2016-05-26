@@ -40,4 +40,4 @@ HAWQ external Table:
                  )
              FORMAT 'CUSTOM' (Formatter='pxfwritable_import');
 
- [chinese readme]: /readme_cn.md
+ [chinese readme]: /README_cn.md
