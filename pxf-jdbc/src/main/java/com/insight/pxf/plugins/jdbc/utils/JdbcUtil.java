@@ -1,5 +1,6 @@
 package com.insight.pxf.plugins.jdbc.utils;
 
+import org.apache.hawq.pxf.api.UnsupportedTypeException;
 import org.apache.hawq.pxf.api.utilities.InputData;
 
 import java.sql.Connection;
@@ -8,6 +9,16 @@ import java.sql.Connection;
  * Created by jiadx on 2016/5/13.
  */
 public class JdbcUtil {
+
+
+    public static DbProduct getDbProduct(String db_product){
+        if (db_product.toUpperCase().contains("MYSQL"))
+            return new MysqlProduct();
+        else if (db_product.toUpperCase().contains("ORACLE"))
+            return new OracleProduct();
+        else
+            throw new UnsupportedTypeException("Unkwon Database Product: " + db_product );
+    }
 
     public static byte[] mergeBytes(byte[] b1, byte[] b2) {
         byte[] newb = new byte[b1.length + b2.length];

@@ -1,6 +1,7 @@
 # README
 
-implements hawq pxf jdbc read plugin  。
+implements hawq pxf jdbc read plugin  AND pxf solr plugin。
+
 more detail -> [chinese readme].
 # example1
 
@@ -38,6 +39,19 @@ HAWQ external Table:
                      '&DB_URL=jdbc:oracle:thin:@10.110.17.21:1521:xe&USER=sys as sysdba&PASS=oracle'
                      '&PARTITION_BY=cdate:date&RANGE=2008-01-01:2010-01-01&INTERVAL=1:month'
                  )
+             FORMAT 'CUSTOM' (Formatter='pxfwritable_import');
+
+# example3-solr
+
+    CREATE EXTERNAL TABLE ssales(id integer,
+             cdate date,
+             amt float8,
+             grade text,
+             score real)
+             LOCATION ('pxf://localhost:51200/sales'
+                     '?PROFILE=SOLR'
+                     '&URL=http://10.110.17.21:8985/solr'
+                     )
              FORMAT 'CUSTOM' (Formatter='pxfwritable_import');
 
  [chinese readme]: /README_cn.md

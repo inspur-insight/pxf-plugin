@@ -1,9 +1,8 @@
 package com.insight.pxf.plugins.jdbc;
 
-import com.insight.pxf.plugins.jdbc.Table;
+import com.insight.pxf.plugins.jdbc.utils.DbProduct;
 import com.insight.pxf.plugins.jdbc.utils.JdbcUtil;
 import org.apache.hawq.pxf.api.Fragment;
-import org.apache.hawq.pxf.api.Fragmenter;
 import org.apache.hawq.pxf.api.UnsupportedTypeException;
 import org.apache.hawq.pxf.api.utilities.InputData;
 
@@ -110,13 +109,14 @@ public class JdbcPartitionFragmenter extends JdbcFragmenter {
                 Date t_start = df.parse(range[0]);
                 Date t_end = df.parse(range[1]);
                 int curr_interval = intervalVal;
+                /*
                 long curr_frags = (t_end.getTime() - t_start.getTime()) / (curr_interval * intervals.get(intervalType));
                 if (curr_frags > MAX_FRAGMENTS) {
                     //调整间隔时间 = 总时间范围/最大分片数 (毫秒单位)
                     //间隔单位=间隔毫秒时间/单位时间
                     curr_interval = (int) (((t_end.getTime() - t_start.getTime()) / MAX_FRAGMENTS) / intervals.get(intervalType));
                     //校验:curr_interval > 0，主要是在long转int时会出现负值
-                }
+                }*/
                 Calendar frag_start = Calendar.getInstance();
                 Calendar c_end = Calendar.getInstance();
                 frag_start.setTime(t_start);
@@ -156,8 +156,8 @@ public class JdbcPartitionFragmenter extends JdbcFragmenter {
                 int i_start = Integer.parseInt(range[0]);
                 int i_end = Integer.parseInt(range[1]);
                 int curr_interval = intervalVal;
-                int curr_frags = (i_end - i_start) / curr_interval;
-                if (curr_frags > MAX_FRAGMENTS) curr_interval = (i_end - i_start) / MAX_FRAGMENTS;
+                //int curr_frags = (i_end - i_start) / curr_interval;
+                //if (curr_frags > MAX_FRAGMENTS) curr_interval = (i_end - i_start) / MAX_FRAGMENTS;
                 //校验:curr_interval > 0
                 int frag_start = i_start;
                 while (frag_start < i_end) {
@@ -186,7 +186,7 @@ public class JdbcPartitionFragmenter extends JdbcFragmenter {
                 break;
         }
 
-        return assignHost(fragments);
+        return JdbcFragmenterFactory.assignHost(fragments);
     }
 
     @Override
@@ -194,6 +194,8 @@ public class JdbcPartitionFragmenter extends JdbcFragmenter {
         byte[] meta = inputData.getFragmentMetadata();
         if (meta == null)
             return origin_sql;
+
+        DbProduct dbProduct = JdbcUtil.getDbProduct(db_product);
 
         StringBuilder sb = new StringBuilder(origin_sql);
         if (!origin_sql.contains("WHERE"))
@@ -209,16 +211,10 @@ public class JdbcPartitionFragmenter extends JdbcFragmenter {
                 Date frag_start = new Date(JdbcUtil.toLong(newb[0]));
                 Date frag_end = new Date(JdbcUtil.toLong(newb[1]));
 
-                if (db_product.toUpperCase().contains("MYSQL")) {
-                    sb.append(partitionColumn).append(" >= DATE('").append(df.format(frag_start)).append("')");
-                    sb.append(" AND ");
-                    sb.append(partitionColumn).append(" < DATE('").append(df.format(frag_end)).append("')");
-                } else if (db_product.toUpperCase().contains("ORACLE")) {
-                    sb.append(partitionColumn).append(" >= to_date('").append(df.format(frag_start)).append("','yyyy-mm-dd')");
-                    sb.append(" AND ");
-                    sb.append(partitionColumn).append(" < to_date('").append(df.format(frag_end)).append("','yyyy-mm-dd')");
-                } else
-                    throw new UnsupportedTypeException("Unkwon Database Product: " + db_product);
+                sb.append(partitionColumn).append(" >= ").append(dbProduct.wrapDate(df.format(frag_start)));
+                sb.append(" AND ");
+                sb.append(partitionColumn).append(" < ").append(dbProduct.wrapDate(df.format(frag_end)));
+
                 break;
             }
             case INT: {

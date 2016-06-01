@@ -1,11 +1,10 @@
 package com.insight.pxf.plugins.jdbc;
 
-import com.insight.pxf.cluster.PxfGroupListener;
+import com.insight.pxf.plugins.PxfGroupListener;
 import org.apache.hawq.pxf.api.Fragment;
 import org.apache.hawq.pxf.api.Fragmenter;
 import org.apache.hawq.pxf.api.FragmentsStats;
 import org.apache.hawq.pxf.api.utilities.InputData;
-import org.apache.hawq.pxf.service.FragmenterFactory;
 
 import java.util.List;
 import java.util.Random;
@@ -27,6 +26,22 @@ public class JdbcFragmenterFactory extends Fragmenter {
     public JdbcFragmenterFactory(InputData inConf) {
         super(inConf);
         fragmenter = createJdbcFragmenter(inConf);
+    }
+
+    /*为每个分片分配主机地址
+          hosts中的主机是pxf进程所在的主机名，而不是目标数据库的主机名.
+          pxf框架会调度任务到segment，由segment再连接pxf进程.
+        */
+    public static List<Fragment> assignHost(List<Fragment> fragments) throws Exception {
+        String[] pxfmembers = PxfGroupListener.getPxfMembers();
+        Random rand = new Random();
+        for (Fragment fragment : fragments) {
+            //主机名从PXF实例中随机选择
+            String[] hosts = new String[]{pxfmembers[rand.nextInt(pxfmembers.length)]};
+            fragment.setReplicas(hosts);
+        }
+
+        return fragments;
     }
 
     @Override

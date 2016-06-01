@@ -6,6 +6,6 @@
         <param-value>127.0.0.1:2181</param-value>
     </context-param>
     <listener>
-        <listener-class>com.insight.pxf.cluster.PxfGroupListener</listener-class>
+        <listener-class>com.insight.pxf.plugins.PxfGroupListener</listener-class>
     </listener>
 </web-app>

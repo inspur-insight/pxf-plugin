@@ -43,7 +43,7 @@ public class SalesTableTest extends JdbcUnit {
         extraParams.add(new Pair<String, String>("RANGE", "2008-01-01:2010-01-01"));
         extraParams.add(new Pair<String, String>("INTERVAL", "1:month"));
 
-        assertFragmentsOutput(TABLE_NAME,16);
+        assertFragmentsOutput(TABLE_NAME, null, 16);
     }
 
     @Test
@@ -51,9 +51,9 @@ public class SalesTableTest extends JdbcUnit {
         //PARTITION_BY=year:int&RANGE=2008:2010&INTERVAL=1
         extraParams.add(new Pair<String, String>("PARTITION_BY", "id:int"));
         extraParams.add(new Pair<String, String>("RANGE", "1:30"));
-        extraParams.add(new Pair<String, String>("INTERVAL", "1"));
+        extraParams.add(new Pair<String, String>("INTERVAL", "7"));
 
-        assertFragmentsOutput(TABLE_NAME,16);
+        assertFragmentsOutput(TABLE_NAME, null, 16);
     }
 
     @Test
@@ -62,12 +62,24 @@ public class SalesTableTest extends JdbcUnit {
         extraParams.add(new Pair<String, String>("PARTITION_BY", "grade:enum"));
         extraParams.add(new Pair<String, String>("RANGE", "excellent:good:general:bad"));
 
-        assertFragmentsOutput(TABLE_NAME,16);
+        assertFragmentsOutput(TABLE_NAME, null, 16);
     }
 
     @Test
     public void testPageFrags() throws Exception {
-        assertFragmentsOutput(TABLE_NAME,16);
+        assertFragmentsOutput(TABLE_NAME, null, 16);
+    }
+
+    @Test
+    public void testIntFilter() throws Exception {
+        String filterString = "a0c5o4";//id>=5
+        assertFragmentsOutput(TABLE_NAME, filterString, 12);
+    }
+
+    @Test
+    public void testDateFilter() throws Exception {
+        String filterString = "a1c\"2008-10-01\"o4";//cdate >= '2008-10-01'//暂不支持
+        assertFragmentsOutput(TABLE_NAME, filterString, 7);
     }
 
     @Override

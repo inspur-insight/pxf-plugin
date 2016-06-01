@@ -29,7 +29,7 @@ public class JdbcPartitionFragmenterTest extends JdbcUnit {
         extraParams.add(new Pair<String, String>("RANGE", "2008-01-01:2010-01-01"));
         extraParams.add(new Pair<String, String>("INTERVAL", "1:month"));
 
-        super.setup("sales");
+        super.setup("sales", null);
 
         for (InputData input : frag_inputs){
             JdbcFragmenter fragment = (JdbcFragmenter) getFragmenter(input);
@@ -44,7 +44,7 @@ public class JdbcPartitionFragmenterTest extends JdbcUnit {
         extraParams.add(new Pair<String, String>("RANGE", "1:3"));
         extraParams.add(new Pair<String, String>("INTERVAL", "11"));
 
-        super.setup("sales");
+        super.setup("sales", null);
 
         for (InputData input : frag_inputs){
             JdbcFragmenter fragment = (JdbcFragmenter) getFragmenter(input);
@@ -58,7 +58,7 @@ public class JdbcPartitionFragmenterTest extends JdbcUnit {
         extraParams.add(new Pair<String, String>("PARTITION_BY", "grade:enum"));
         extraParams.add(new Pair<String, String>("RANGE", "excellent:good:general:bad"));
 
-        super.setup("sales");
+        super.setup("sales", null);
 
         for (InputData input : frag_inputs){
             JdbcFragmenter fragment = (JdbcFragmenter) getFragmenter(input);

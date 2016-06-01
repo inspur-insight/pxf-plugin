@@ -1,9 +1,11 @@
 package com.insight.pxf.plugins.jdbc;
 
 
-import java.util.LinkedList;
 import java.util.List;
 
+import com.insight.pxf.plugins.SimpleFilterBuilder;
+import com.insight.pxf.plugins.jdbc.utils.DbProduct;
+import com.insight.pxf.plugins.jdbc.utils.JdbcUtil;
 import org.apache.hawq.pxf.api.FilterParser;
 import org.apache.hawq.pxf.api.io.DataType;
 import org.apache.hawq.pxf.api.utilities.ColumnDescriptor;
@@ -53,14 +55,17 @@ import org.apache.hawq.pxf.api.utilities.InputData;
  * filter: a2c1o5
  * 下推条件: sex=1
  */
-public class JdbcFilterBuilder implements FilterParser.FilterBuilder {
+public class JdbcFilterBuilder extends SimpleFilterBuilder {
     private InputData inputData;
 
     public JdbcFilterBuilder(InputData input) {
         inputData = input;
     }
 
-    public String getWhere(String filterString) throws Exception {
+    public String buildWhereExpress(String db_product) throws Exception {
+        if(!inputData.hasFilter()) return null;
+        String filterString = inputData.getFilterString();
+
         List<FilterParser.BasicFilter> filters = (List<FilterParser.BasicFilter>) getFilterObject(filterString);
         StringBuffer sb = new StringBuffer("1=1");
         for (FilterParser.BasicFilter filter : filters) {
@@ -90,15 +95,23 @@ public class JdbcFilterBuilder implements FilterParser.FilterBuilder {
                     break;
             }
             //表达式
+            DbProduct dbProduct = JdbcUtil.getDbProduct(db_product);
             Object val = filter.getConstant().constant();
             switch (DataType.get(column.columnTypeCode())) {
                 case SMALLINT:
                 case INTEGER:
                 case BIGINT:
+                case FLOAT8:
+                case REAL:
+                case BOOLEAN:
                     sb.append(val.toString());
                     break;
                 case TEXT:
                     sb.append('"').append(val.toString()).append('"');
+                    break;
+                case DATE:
+                    //需要根据数据库定制
+                    sb.append(dbProduct.wrapDate(val));
                     break;
                 default:
                     throw new Exception("unsupported column type for filtering " + column.columnTypeCode());
@@ -107,80 +120,5 @@ public class JdbcFilterBuilder implements FilterParser.FilterBuilder {
             sb.append("");
         }
         return sb.toString();
-    }
-
-    /*
-     * Translates a filterString into a FilterParser.BasicFilter or a list of such filters
-     */
-    public Object getFilterObject(String filterString) throws Exception {
-        FilterParser parser = new FilterParser(this);
-        Object result = parser.parse(filterString);
-
-        if (!(result instanceof FilterParser.BasicFilter) && !(result instanceof List))
-            throw new Exception("String " + filterString + " resolved to no filter");
-
-        if (!(result instanceof List)) {
-            LinkedList<FilterParser.BasicFilter> list = new LinkedList<FilterParser.BasicFilter>();
-            list.add((FilterParser.BasicFilter) result);
-            result = list;
-        }
-
-        return result;
-    }
-
-    //2个检查实际可用不执行，因为不符合这2种情况的条件也不会pushdown到PXF
-    /*
-      filter构建过程：
-       1.从左到右解析
-       2.解析字段的表达式条件，构建出BasicFilter对象
-       3.如果下一个操作是组合（AND），则先解析右边的表达式
-       4.根据AND将多个条件进行组合，创建BasicFilter的集合->做为下一个组合的leftOperand
-       5.继续3
-     */
-    @Override
-    public Object build(FilterParser.Operation opId,
-                        Object leftOperand,
-                        Object rightOperand) throws Exception {
-        if (leftOperand instanceof FilterParser.BasicFilter
-                || leftOperand instanceof List) {
-            //检查1：多个条件之间只能是AND关系
-            if (opId != FilterParser.Operation.HDOP_AND || !(rightOperand instanceof FilterParser.BasicFilter))
-                throw new Exception("Only AND is allowed between compound expressions");
-
-            //case 3
-            if (leftOperand instanceof List)
-                return handleCompoundOperations((List<FilterParser.BasicFilter>) leftOperand, (FilterParser.BasicFilter) rightOperand);
-                //case 2
-            else
-                return handleCompoundOperations((FilterParser.BasicFilter) leftOperand, (FilterParser.BasicFilter) rightOperand);
-        }
-
-        //检查2：条件表达式右边必须是常量
-        if (!(rightOperand instanceof FilterParser.Constant))
-            throw new Exception("expressions of column-op-column are not supported");
-
-        //case 1 (assume column is on the left)
-        return handleSimpleOperations(opId, (FilterParser.ColumnIndex) leftOperand, (FilterParser.Constant) rightOperand);
-    }
-
-    private FilterParser.BasicFilter handleSimpleOperations(FilterParser.Operation opId,
-                                                            FilterParser.ColumnIndex column,
-                                                            FilterParser.Constant constant) {
-        return new FilterParser.BasicFilter(opId, column, constant);
-    }
-
-    private List handleCompoundOperations(List<FilterParser.BasicFilter> left,
-                                          FilterParser.BasicFilter right) {
-        left.add(right);
-        return left;
-    }
-
-    private List handleCompoundOperations(FilterParser.BasicFilter left,
-                                          FilterParser.BasicFilter right) {
-        List<FilterParser.BasicFilter> result = new LinkedList<FilterParser.BasicFilter>();
-
-        result.add(left);
-        result.add(right);
-        return result;
     }
 }

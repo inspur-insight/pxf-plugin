@@ -1,14 +1,19 @@
 # 说明
+在一个实际的项目中可能存在多种数据存储技术，如传统的关系数据库，新兴的Hadoop、nosql、搜索引擎等。
+进行综合分析时可能需要几类数据之间的关联处理，一种解决方案是把数据合并在一起，如统一抽取到Hadoop进行分析。
+第二种方案可以通过数据联邦的技术实现多种异构数据源的关联分析，其优点是不用迁移数据。
 
+HAWQ Extension Framework (PXF)提供了一种灵活、可扩展的框架，使HAWQ能查询外部数据。HAWQ项目本身的PXF内置提供了HADOOP系列存储的插件-HDFS/HIVE/HBASE。
+
+而本项目提供的插件可以实现HAWQ对关系数据库（JDBC）、搜索引擎（Solr）等外部数据的查询。
 # PXF JDBC
-
 ## 部署
 1.将编译、打包后的pxf-jdbc.jar复制到/opt/pxf/lib/。
 还有mysql的jdbc驱动包。
 
 2.修改/etc/pxf/conf/pxf-private.classpath文件，增加一条路径记录：
 
-    /opt/pxf/lib/pxf-jdbc.jar
+    /opt/pxf/lib/pxf-jdbc-3.0.0.jar
     /opt/pxf/lib/mysql-connector-java-5.1.35-bin.jar
 
 3.修改/etc/pxf/conf/pxf-profiles.xml，增加JDBC的profile（可选）：
@@ -17,11 +22,12 @@
         <name>JDBC</name>
         <description>A profile for writing data out of HAWQ via JDBC</description>
         <plugins>
+            <fragmenter>com.insight.pxf.plugins.jdbc.JdbcFragmenterFactory</fragmenter>
             <accessor>com.insight.pxf.plugins.jdbc.JdbcAccessor</accessor>
             <resolver>com.insight.pxf.plugins.jdbc.JdbcResolver</resolver>
         </plugins>
     </profile>
-使用profile后，则创建PXF表时可以不用再指定accessor了。
+使用profile后，创建PXF表时可以不用再指定accessor了。
 
 ## 重新启动pxf
 在各节点重启。
@@ -29,22 +35,24 @@
     /opt/pxf/init.d/pxf-service restart
 参考
 ## 使用
-### 模板示例
+### 模板
 
     CREATE [READABLE|WRITABLE] EXTERNAL TABLE table_name
                 ( column_name data_type [, ...] | LIKE other_table )
             LOCATION ('pxf://namenode[:port]/schema.tablename?Profile=JDBC'
-                           '&&JDBC_DRIVER=com.mysql.jdbc.Driver'
-                           '&&DB_URL=jdbc:mysql://192.168.200.6:3306/mysql&&USER=root&&PASS=root'
+                           '&JDBC_DRIVER=com.mysql.jdbc.Driver'
+                           '&DB_URL=jdbc:mysql://192.168.200.6:3306/mysql&USER=root&PASS=root'
+                           '&FRAGMENT_ROWS=1000'
                      )
+参数说明：
 
-    CREATE EXTERNAL TABLE mysqluser(seq integer,city text, aqi integer,quality text)
-                    LOCATION ('pxf://hmaster:51200/mysql'
-                              '?PROFILE=JDBC'
-                              '&&JDBC_DRIVER=com.mysql.jdbc.Driver'
-                              '&&DB_URL=jdbc:mysql://192.168.200.6:3306/mysql&&USER=root&&PASS=root'
-                              '&&TABLE_NAME=mysql.user')
-                   FORMAT 'CSV';
+    schema.tablename - 数据表名，在'pxf://'中设置
+    JDBC_DRIVER      - jdbc驱动类名
+    DB_URL           - jdbc连接的数据库url
+    USER/PASS        - 数据库连接的用户名/密码
+    FRAGMENT_ROWS    - 每个分片的查询数据量，可选，默认1000
+
+
 ### 部署mysql数据库
 
     docker run --name mysqldb --restart always -p 3306:3306\
@@ -63,7 +71,7 @@
     字段名	数字类型	数据宽度	是否为空	是否主键	自动增加	默认值
     id	int	4	否	primary key	auto_increment
     name	char	20	否
-    sex	int	4	否	 	 	0
+    gender	int	4	否	 	 	0
     degree	double	16	是
 
     mysql> use demodb;
@@ -143,10 +151,10 @@
         <param-value>zkserver.docker:2181</param-value>
     </context-param>
     <listener>
-        <listener-class>com.insight.pxf.cluster.PxfGroupListener</listener-class>
+        <listener-class>com.insight.pxf.plugins.PxfGroupListener</listener-class>
     </listener>
 
-可以把这个配置放到pxf服务的安装、启动脚本中。
+可以把这个配置放到pxf服务的配置文件->pxf-site.xml中。
 
 ### 重启pxf-service
 
@@ -240,7 +248,7 @@ Connect to Oracle Enterprise Management console with following settings:
     CREATE EXTERNAL TABLE sales(id integer,
              cdate date,
              amt float8,
-             level text)
+             grade text)
              LOCATION ('pxf://localhost:51200/sales'
                      '?PROFILE=JDBC'
                      '&JDBC_DRIVER=oracle.jdbc.driver.OracleDriver'
@@ -265,7 +273,7 @@ Connect to Oracle Enterprise Management console with following settings:
     LOCATION ('pxf://localhost:51200/mytable'
      '?PROFILE=JDBC'
      ....
-     '&MAX_ROWS_PER_FRAG=10000&MAX_FRAGMENTS=10'
+     '&FRAGMENT_ROWS=10000'
 
 
 ## 数据库分区
@@ -303,3 +311,10 @@ pxf不允许在建表时更改为其他值`。
 
     ...
     &PARTITION_BY=level:enum&RANGE=excellent:good:general:bad
+# SOLR外部表
+参见[pxf-solr] READEME.
+
+# pxf-site.xml配置参考
+
+
+[pxf-solr]: pxf-solr/README_cn.md

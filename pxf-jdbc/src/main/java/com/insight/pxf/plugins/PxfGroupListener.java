@@ -1,4 +1,4 @@
-package com.insight.pxf.cluster;
+package com.insight.pxf.plugins;
 
 /**
  * Created by jiadx on 2016/5/17.
@@ -27,6 +27,7 @@ import org.apache.curator.framework.recipes.nodes.GroupMember;
 import org.apache.curator.framework.state.ConnectionState;
 import org.apache.curator.framework.state.ConnectionStateListener;
 import org.apache.curator.retry.ExponentialBackoffRetry;
+import org.apache.hadoop.conf.Configuration;
 
 import javax.servlet.ServletContext;
 import javax.servlet.ServletContextEvent;
@@ -62,7 +63,7 @@ public class PxfGroupListener implements ServletContextListener {
         context = arg0.getServletContext();
         this.thisId = getLocalAddr(context);
 
-        String zk_hosts = context.getInitParameter("zookeeper");
+        String zk_hosts = getZkServers(context);//context.getInitParameter("zookeeper");
         zk_client = CuratorFrameworkFactory.newClient(zk_hosts, new ExponentialBackoffRetry(5000, Integer.MAX_VALUE));
         zk_client.start();
 
@@ -94,7 +95,17 @@ public class PxfGroupListener implements ServletContextListener {
             }
         });
 
-        System.out.println(String.format("ServletContext[%s] is inited...", context.getServerInfo()));
+        LOG.info(String.format("ServletContext[%s] is inited...", context.getServerInfo()));
+    }
+    private String getZkServers(ServletContext context){
+        //String zk_hosts = context.getInitParameter("zookeeper");
+        Configuration config = new Configuration();
+        config.addResource("pxf-site.xml");
+        String zk_hosts = config.get("zookeeper");
+        if(LOG.isDebugEnabled())
+            LOG.debug("zookeeper server is :" + zk_hosts);
+
+        return zk_hosts;
     }
 
     public void contextDestroyed(ServletContextEvent arg0) {
@@ -103,7 +114,7 @@ public class PxfGroupListener implements ServletContextListener {
             pxfGroup.close();
             zk_client.close();
         }
-        System.out.println(String.format("ServletContext[%s] is destoryed...", context.getServerInfo()));
+        LOG.info(String.format("ServletContext[%s] is destoryed...", context.getServerInfo()));
 
     }
 

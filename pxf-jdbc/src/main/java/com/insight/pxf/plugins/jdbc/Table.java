@@ -1,16 +1,12 @@
 package com.insight.pxf.plugins.jdbc;
 
-import com.insight.pxf.plugins.jdbc.utils.JdbcUtil;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hawq.pxf.api.utilities.ColumnDescriptor;
 import org.apache.hawq.pxf.api.utilities.InputData;
 
-import java.io.IOException;
-import java.net.*;
 import java.sql.*;
 import java.util.ArrayList;
-import java.util.Enumeration;
 
 /**
  * Created by jiadx on 2016/5/13.
@@ -26,7 +22,6 @@ public class Table {
     private int numAdded = 0;
 
     private String sql = null;
-    private String whereSql = null;
     private Statement statement = null;
     private Connection conn = null;
     private InputData inputData = null;
@@ -34,8 +29,12 @@ public class Table {
     private String dbProduct = null;//数据库类型，从connection元数据获取。
     private ColumnDescriptor keyColumn = null;
 
+    JdbcFilterBuilder filterBuilder = null;
+
     public Table(InputData input) throws Exception {
         this.inputData = input;
+        filterBuilder = new JdbcFilterBuilder(inputData);
+
         jdbcDriver = input.getUserProperty("JDBC_DRIVER");
         dbUrl = input.getUserProperty("DB_URL");
         //dbUrl = "jdbc:mysql://192.168.200.6:3306/demodb";
@@ -73,8 +72,6 @@ public class Table {
         }
         sb.append(" FROM ").append(getTableName());
         sql = sb.toString();
-
-        whereSql = getWhereSql(inputData);
     }
 
     public Table(String driver, String url, String user, String pass, String tblName) {
@@ -117,14 +114,16 @@ public class Table {
     }
 
     public ResultSet executeQuery() throws Exception {
+        //statement = conn.createStatement();//已经在openTable中创建
+        open();
+
         String query = sql;
+        String whereSql = filterBuilder.buildWhereExpress(dbProduct);
 
         //执行查询，准备读取数据
         if (whereSql != null) {
             query = query + " WHERE " + whereSql;
         }
-        //statement = conn.createStatement();//已经在openTable中创建
-        open();
 
         query = JdbcFragmenter.buildFragmenterSql(inputData, dbProduct, query);
 
@@ -137,11 +136,14 @@ public class Table {
 
     //计算当前查询表的总行数
     public int getCount() throws Exception {
+        open();
         String query = "SELECT count(1) FROM " + getTableName();
+        String whereSql = filterBuilder.buildWhereExpress(dbProduct);
+
         if (whereSql != null) {
             query = query + " WHERE " + whereSql;
         }
-        open();
+
         ResultSet rs = statement.executeQuery(query);
         try {
             if (rs.next())
@@ -150,22 +152,6 @@ public class Table {
             rs.close();
         }
         return 0;
-    }
-
-    /*
-    对数据表查询进行分片，返回List数组。
-    数组元素：分片起始行，每片行数
-     */
-    //public
-
-    public static String getWhereSql(InputData inputData) throws Exception {
-        if (inputData.hasFilter()) {
-            String filterStr = inputData.getFilterString();
-            //LOG.debug("openForRead()-->filterStr=" + filterStr);
-            JdbcFilterBuilder eval = new JdbcFilterBuilder(inputData);
-            return eval.getWhere(filterStr);
-        }
-        return null;
     }
 
     public void close() throws SQLException {

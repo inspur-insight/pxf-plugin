@@ -1,14 +1,7 @@
 package com.insight.pxf.plugins.jdbc;
 
-import com.insight.pxf.cluster.PxfGroupListener;
-import org.apache.hawq.pxf.api.Fragment;
 import org.apache.hawq.pxf.api.Fragmenter;
 import org.apache.hawq.pxf.api.utilities.InputData;
-import org.apache.hawq.pxf.service.FragmenterFactory;
-
-import java.lang.reflect.Constructor;
-import java.util.List;
-import java.util.Random;
 
 /**
  * Created by jiadx on 2016/5/13.
@@ -20,9 +13,8 @@ import java.util.Random;
  * 3.数据库分表：暂不支持，可以在hawq定义多个表关联。
  */
 public abstract class JdbcFragmenter extends Fragmenter {
-    //2个参数可以从pxf-site.xml中获取
-    static int MAX_ROWS_PER_FRAG = 10;//每个分片的最大行数
-    static int MAX_FRAGMENTS = 5;//最大分片数或当前"PXF实例数/2"
+    //参数可以从pxf-site.xml中获取
+    static int FRAGMENT_ROWS = 100;//每个分片的最大行数
 
     public JdbcFragmenter(InputData inConf) {
         super(inConf);
@@ -40,19 +32,4 @@ public abstract class JdbcFragmenter extends Fragmenter {
     abstract String buildFragmenterSql(String db_product, String origin_sql);
 
 
-    /*为每个分片分配主机地址
-      hosts中的主机是pxf进程所在的主机名，而不是目标数据库的主机名.
-      pxf框架会调度任务到segment，由segment再连接pxf进程.
-    */
-    public static List<Fragment> assignHost(List<Fragment> fragments) throws Exception {
-        String[] pxfmembers = PxfGroupListener.getPxfMembers();
-        Random rand = new Random();
-        for (Fragment fragment : fragments) {
-            //主机名从PXF实例中随机选择
-            String[] hosts = new String[]{pxfmembers[rand.nextInt(pxfmembers.length)]};
-            fragment.setReplicas(hosts);
-        }
-
-        return fragments;
-    }
 }

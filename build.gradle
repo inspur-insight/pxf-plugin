@@ -105,6 +105,13 @@ project('pxf-jdbc') {
     }
 }
 
+project('pxf-solr') {
+    dependencies {
+        compile(project(':pxf-jdbc'))
+        compile 'org.apache.solr:solr-solrj:5.3.1'
+    }
+}
+
 task wrapper(type: Wrapper) {
     gradleVersion = '2.11'
 }

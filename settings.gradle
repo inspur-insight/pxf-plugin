@@ -20,3 +20,4 @@
 rootProject.name = 'pxf-plugin'
 
 include 'pxf-jdbc'
+include 'pxf-solr'

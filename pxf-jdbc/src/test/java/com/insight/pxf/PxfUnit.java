@@ -95,11 +95,28 @@ public abstract class PxfUnit {
     public void assertOutput(String input, List<String> expectedOutput)
             throws Exception {
 
-        setup(input);
+        setup(input, null);
         List<String> actualOutput = getFragmentsOut(frag_inputs);
 
         Assert.assertFalse("Output did not match expected output",
                 compareOutput(expectedOutput, actualOutput));
+    }
+
+    //检查分区数据是否完整
+    public void assertFragmentsOutput(String input, String filterString, int expectedRows) throws Exception {
+        setup(input, filterString);
+
+        //查询全表数据
+        List<String> expectedOutput = getAllOutput();
+        Assert.assertEquals("数据未全部遍历.",expectedRows,expectedOutput.size());
+
+        //分区读取数据
+        List<String> actualOutput = getFragmentsOut(frag_inputs);
+
+        //比较
+        Assert.assertFalse("Output did not match expected output",
+                compareUnorderedOutput(expectedOutput, actualOutput));
+
     }
 
     protected List<String> getFragmentsOut(List<InputData> frag_inputs) throws Exception {
@@ -108,7 +125,7 @@ public abstract class PxfUnit {
             ReadAccessor accessor = getReadAccessor(data);
             ReadResolver resolver = getReadResolver(data);
 
-            actualOutput.addAll(getAllOutput(accessor, resolver));
+            actualOutput.addAll(getOutputData(accessor, resolver));
         }
         return actualOutput;
     }
@@ -155,7 +172,7 @@ public abstract class PxfUnit {
     public void assertUnorderedOutput(String input, List<String> expectedOutput)
             throws Exception {
 
-        setup(input);
+        setup(input, null);
 
         List<String> actualOutput = getFragmentsOut(frag_inputs);
 
@@ -174,13 +191,13 @@ public abstract class PxfUnit {
      */
     public void writeOutput(String input, OutputStream output) throws Exception {
 
-        setup(input);
+        setup(input, null);
 
         for (InputData data : frag_inputs) {
             ReadAccessor accessor = getReadAccessor(data);
             ReadResolver resolver = getReadResolver(data);
 
-            for (String line : getAllOutput(accessor, resolver)) {
+            for (String line : getOutputData(accessor, resolver)) {
                 output.write((line + "\n").getBytes());
             }
         }
@@ -310,9 +327,10 @@ public abstract class PxfUnit {
      *
      * @param input
      *            The input path, relative or absolute.
+     * @param filterString
      * @throws Exception
      */
-    protected void setup(String input) throws Exception {
+    protected void setup(String input, String filterString) throws Exception {
         if (input == null) input = "/dummydata";
 
         Assert.assertNotNull( "getFragmenterClass() must be overwritten to return a non-null object",getFragmenterClass());
@@ -323,9 +341,14 @@ public abstract class PxfUnit {
 
         // 2.1.0 Properties
         // HDMetaData parameters
+        if(filterString == null || filterString.equals("")) {
+            paramsMap.put("X-GP-HAS-FILTER", "0");
+        }else{
+            paramsMap.put("X-GP-HAS-FILTER", "1");
+            paramsMap.put("X-GP-FILTER", filterString);
+        }
         paramsMap.put("X-GP-ALIGNMENT", "what");
         paramsMap.put("X-GP-SEGMENT-ID", "1");
-        paramsMap.put("X-GP-HAS-FILTER", "0");
         paramsMap.put("X-GP-SEGMENT-COUNT", "1");
         paramsMap.put("X-GP-FRAGMENTER", getFragmenterClass().getName());
         paramsMap.put("X-GP-FORMAT", "GPDBWritable");
@@ -520,8 +543,8 @@ public abstract class PxfUnit {
      * @return The list of output strings
      * @throws Exception
      */
-    protected List<String> getAllOutput(ReadAccessor accessor,
-                                        ReadResolver resolver) throws Exception {
+    protected List<String> getOutputData(ReadAccessor accessor,
+                                         ReadResolver resolver) throws Exception {
 
         Assert.assertTrue("Accessor failed to open", accessor.openForRead());
 
@@ -546,6 +569,12 @@ public abstract class PxfUnit {
         accessor.closeForRead();
 
         return output;
+    }
+
+    protected List<String> getAllOutput() throws Exception {
+        ReadAccessor accessor = getReadAccessor(masterInputData);
+        ReadResolver resolver = getReadResolver(masterInputData);
+        return getOutputData(accessor,resolver);
     }
 
     /**

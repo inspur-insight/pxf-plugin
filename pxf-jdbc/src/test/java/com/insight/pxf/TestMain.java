@@ -1,5 +1,6 @@
 package com.insight.pxf;
 
+import com.insight.pxf.plugins.PageFragmentComputer;
 import com.insight.pxf.plugins.jdbc.JdbcFilterBuilder;
 import com.insight.pxf.plugins.jdbc.JdbcPageFragmenter;
 import com.insight.pxf.plugins.jdbc.Table;
@@ -16,7 +17,7 @@ public class TestMain {
     public static void main(String[] a) throws Exception {
         //testFilter();
         //testBytes();
-        List<int[]> pages = JdbcPageFragmenter.computeFragment(11);
+        List<int[]> pages = PageFragmentComputer.computeFragment(11,3);
         for (int[] pg : pages) {
             System.out.println("Page:" + pg[0] + ", count=" + pg[1]);
         }
