@@ -3,6 +3,28 @@
 implements hawq pxf jdbc read plugin  AND pxf solr plugin。
 
 more detail -> [chinese readme].
+
+# build
+
+    gradlew jar
+
+# Config
+## modify File - /etc/pxf/conf/pxf-profiles.xml
+
+    <profile>
+            <name>JDBC</name>
+            <description>A profile for writing data out of HAWQ via JDBC</description>
+            <plugins>
+                <fragmenter>com.insight.pxf.plugins.jdbc.JdbcFragmenterFactory</fragmenter>
+                <accessor>com.insight.pxf.plugins.jdbc.JdbcAccessor</accessor>
+                <resolver>com.insight.pxf.plugins.jdbc.JdbcResolver</resolver>
+            </plugins>
+        </profile>
+## modify file - /etc/pxf/conf/pxf-private.classpath
+    /opt/pxf/lib/pxf-jdbc-3.0.0.jar
+    /opt/pxf/lib/mysql-connector-java-5.1.35-bin.jar
+## restart pxf
+    service pxf-service restart
 # example1
 
 MySql Table:

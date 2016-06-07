@@ -35,6 +35,7 @@ import javax.servlet.ServletContextListener;
 import java.net.*;
 import java.util.Set;
 
+@Deprecated
 public class PxfGroupListener implements ServletContextListener {
     private static final Log LOG = LogFactory.getLog(PxfGroupListener.class);
     static PxfGroupListener _instance = null;

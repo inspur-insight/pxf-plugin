@@ -34,6 +34,15 @@ HAWQ Extension Framework (PXF)提供了一种灵活、可扩展的框架，使HA
 
     /opt/pxf/init.d/pxf-service restart
 参考
+
+## HAWQ配置
+由于PXF服务一般是与Segment部署在同一个主机，而不是与关系数据库共同部署，因此Fragment的主机IP需要
+使用Segment主机IP。可修改HAWQ master节点数据目录的postgresql.conf文件，增加如下配置：
+
+    pxf_isilon = true
+重启HAWQ master。
+
+
 ## 使用
 ### 模板
 
@@ -89,7 +98,7 @@ HAWQ Extension Framework (PXF)提供了一种灵活、可扩展的框架，使HA
 ### 创建pxf表连接mysql
 
     CREATE EXTERNAL TABLE myclass(id integer,
-             name varchar,
+             name text,
              gender integer,
              degree float8)
              LOCATION ('pxf://localhost:51200/demodb.myclass'
@@ -99,64 +108,6 @@ HAWQ Extension Framework (PXF)提供了一种灵活、可扩展的框架，使HA
                      )
              FORMAT 'CUSTOM' (Formatter='pxfwritable_import');
 
-# PXF集群发现
-## 说明
-主要实现集群内PXF服务发现，收集当前运行PXF的节点信息。
- * 目的：JDBC表的数据分片
- * 起因：PXF本身是没有集群的概念，每个PXF都是独立管理的，PXF之间没有任何协调信息。
-
-  HAWQ在对数据查询进行并行调度时是根据master->PXF返回的"分片元数据"来管理的。
-  这个"分片元数据"信息包含了：数据所在的主机名及数据段落。然后HAWQ会调度某个segment去执行这个“分片元数据”。
-  segment解析“分片元数据”，并连接“分片元数据”中的主机PXF去读取数据。也就是说数据所在的主机需要运行PXF（但可不运行segment）。
-
-  而我们扩展的JDBC是用来连接已有的关系数据库，不可能在原有的关系数据库主机上运行PXF，因此我们需要一个机制发现当前的PXF实例，
- 在返回的"分片元数据"中任意选择一个PXF实例地址做为主机名。也可以返回多个主机名、多个分片。
-
-
-  实现方案：
- * 使用zookeeper服务发现。
- * 随机选择PXF实例做为分片主机，暂不考虑其他调度算法。
-## 部署
-### 启动zookeeper
-使用容器启动，
-
-    docker run -d --name=zkserver --hostname=zkserver --restart=always \
-    -p 2181:2181 \
-    -e MYID=1 \
-    incloud/zookeeper:3.4.8
-
-    集群启动可以加环境变量：`-e SERVERS=node-1,node-2,node-3`。
-### jar包依赖
-复制如下jar包到：pxf/lib
-
-    curator-framework-2.9.1.jar
-    curator-client-2.9.1.jar
-    curator-recipes-2.9.1.jar
-    zookeeper-3.4.6.jar
-
-
-修改pxf-private.classpath，加入这些jar包：
-
-    /opt/pxf/lib/curator-framework-2.9.1.jar
-    /opt/pxf/lib/curator-client-2.9.1.jar
-    /opt/pxf/lib/curator-recipes-2.9.1.jar
-    /opt/pxf/lib/zookeeper-3.4.6.jar
-
-### 修改pxf-service.war的web.xml
-增加zookeeper相关设置:
-
-    <context-param>
-        <!--zookeeper服务器地址，集群模式可输入多个-->
-        <param-name>zookeeper</param-name>
-        <param-value>zkserver.docker:2181</param-value>
-    </context-param>
-    <listener>
-        <listener-class>com.insight.pxf.plugins.PxfGroupListener</listener-class>
-    </listener>
-
-可以把这个配置放到pxf服务的配置文件->pxf-site.xml中。
-
-### 重启pxf-service
 
 # 数据库表分片问题
 ## 问题
@@ -295,7 +246,8 @@ pxf不允许在建表时更改为其他值`。
 
     CREATE EXTERNAL TABLE psales(id integer,
              cdate date,
-             amt float8)
+             amt float8,
+             grade text)
              LOCATION ('pxf://localhost:51200/sales'
                      '?PROFILE=JDBC'
                      '&JDBC_DRIVER=oracle.jdbc.driver.OracleDriver'
@@ -316,5 +268,117 @@ pxf不允许在建表时更改为其他值`。
 
 # pxf-site.xml配置参考
 
+
+	<property>
+		<name>com.insight.pxf.fragment_rows</name>
+		<value>1000</value>
+		<description>The max row number of per fragment,applied for JDBC and SOLR.</description>
+	</property>
+	<property>
+		<name>com.insight.pxf.solr.max_rows</name>
+		<value>10000</value>
+		<description></description>
+	</property>
+
+
+# PXF服务集群发现 -- 不需要
+**更正：** 在分析hawq源代码时发现，发现有如下代码：
+
+    /*
+				 * in case of remote storage, the segment host is also where the PXF will be running
+				 * so we set allocated->host accordingly, instead of the remote storage system - datanode ip.
+				 */
+				if (pxf_isilon)
+				{
+					pfree(allocated->host);
+					allocated->host = pstrdup(host_ip);
+				}
+当设置`pxf_isilon`参数后，hawq在分配分片到segment时，会把segment的地址做为pxf-service的地址。
+这样也就不需要pxf服务发现了。
+
+修改master节点数据目录的postgresql.conf文件，增加如下配置：
+
+    pxf_isilon = true
+此方式要求segment需要运行pxf服务，并且也无法使用`pxf_enable_locality_optimizations`，
+也就是在hdfs外部表的场景，不能保证将Fragment数据块分配到此数据块Datanode所在节点的pxf服务。
+看代码：
+
+    /*
+			 * locality logic depends on whether we require optimizations (pxf_enable_locality_optimizations guc)
+			 */
+			if (pxf_enable_locality_optimizations && !pxf_isilon)
+			{
+				foreach(datanode_cell, allDNProcessingLoads) /* an attempt at locality - try and find a datanode sitting on the same host with the segment */
+				{
+					DatanodeProcessingLoad *dn = (DatanodeProcessingLoad*)lfirst(datanode_cell);
+					if (are_ips_equal(host_ip, dn->dataNodeIp))
+					{
+						found_dn = dn;
+						appendStringInfo(&msg, "PXF - Allocating the datanode blocks to a local segment. IP: %s\n", found_dn->dataNodeIp);
+						break;
+					}
+				}
+			}
+应该也可以2者并存，首先搜索适合的datanode的ip，如果没有则使用segment的ip。
+
+
+
+## 说明
+主要实现集群内PXF服务发现，收集当前运行PXF的节点信息。
+ * 目的：JDBC表的数据分片
+ * 起因：PXF本身是没有集群的概念，每个PXF都是独立管理的，PXF之间没有任何协调信息。
+
+  HAWQ在对数据查询进行并行调度时是根据master->PXF返回的"分片元数据"来管理的。
+  这个"分片元数据"信息包含了：数据所在的主机名及数据段落。然后HAWQ会调度某个segment去执行这个“分片元数据”。
+  segment解析“分片元数据”，并连接“分片元数据”中的主机PXF去读取数据。也就是说数据所在的主机需要运行PXF（但可不运行segment）。
+
+  而我们扩展的JDBC是用来连接已有的关系数据库，不可能在原有的关系数据库主机上运行PXF，因此我们需要一个机制发现当前的PXF实例，
+ 在返回的"分片元数据"中任意选择一个PXF实例地址做为主机名。也可以返回多个主机名、多个分片。
+
+
+  实现方案：
+ * 使用zookeeper服务发现。
+ * 随机选择PXF实例做为分片主机，暂不考虑其他调度算法。
+## 部署
+### 启动zookeeper
+使用容器启动，
+
+    docker run -d --name=zkserver --hostname=zkserver --restart=always \
+    -p 2181:2181 \
+    -e MYID=1 \
+    incloud/zookeeper:3.4.8
+
+    集群启动可以加环境变量：`-e SERVERS=node-1,node-2,node-3`。
+### jar包依赖
+复制如下jar包到：pxf/lib
+
+    curator-framework-2.9.1.jar
+    curator-client-2.9.1.jar
+    curator-recipes-2.9.1.jar
+    zookeeper-3.4.6.jar
+
+
+修改pxf-private.classpath，加入这些jar包：
+
+    /opt/pxf/lib/curator-framework-2.9.1.jar
+    /opt/pxf/lib/curator-client-2.9.1.jar
+    /opt/pxf/lib/curator-recipes-2.9.1.jar
+    /opt/pxf/lib/zookeeper-3.4.6.jar
+
+### 修改pxf-service.war的web.xml
+增加zookeeper相关设置:
+
+    <context-param>
+        <!--zookeeper服务器地址，集群模式可输入多个-->
+        <param-name>zookeeper</param-name>
+        <param-value>zkserver.docker:2181</param-value>
+    </context-param>
+    <listener>
+        <listener-class>com.insight.pxf.plugins.PxfGroupListener</listener-class>
+    </listener>
+
+可以把这个配置放到pxf服务的配置文件->pxf-site.xml中。
+
+### 重启pxf-service
 
 [pxf-solr]: pxf-solr/README_cn.md

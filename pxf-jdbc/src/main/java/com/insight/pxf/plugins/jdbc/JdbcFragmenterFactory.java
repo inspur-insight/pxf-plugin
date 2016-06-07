@@ -33,11 +33,12 @@ public class JdbcFragmenterFactory extends Fragmenter {
           pxf框架会调度任务到segment，由segment再连接pxf进程.
         */
     public static List<Fragment> assignHost(List<Fragment> fragments) throws Exception {
-        String[] pxfmembers = PxfGroupListener.getPxfMembers();
-        Random rand = new Random();
+        //String[] pxfmembers = PxfGroupListener.getPxfMembers();
+        //Random rand = new Random();
         for (Fragment fragment : fragments) {
             //主机名从PXF实例中随机选择
-            String[] hosts = new String[]{pxfmembers[rand.nextInt(pxfmembers.length)]};
+            //String[] hosts = new String[]{pxfmembers[rand.nextInt(pxfmembers.length)]};
+            String[] hosts = new String[]{""};
             fragment.setReplicas(hosts);
         }
 
